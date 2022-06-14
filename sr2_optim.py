@@ -5,7 +5,7 @@ import numpy as np
 
 
 class SR2optim(Optimizer):
-    """Implementation of Prox-GEN algorithm
+    """Implementation of SR2 algorithm
     Arguments:
         params (iterable): iterable of parameters to optimize or dicts defining
             parameter groups
@@ -108,16 +108,6 @@ class SR2optim(Optimizer):
 
             # Update the weights
             x.data = x.data.add_(state['s'].data)
-
-            # if group['reg'] == 'l1': # Condition on shape of x if len(x.data.shape) != 1: state['s'].data =
-            # torch.max(x.data - grad / sigma - (lmbda / sigma), torch.zeros_like(x.data)) - \ torch.max(-x.data +
-            # grad / sigma - (lmbda / sigma), torch.zeros_like(x.data)) - \ x.data
-
-
-            # elif group['reg'] == 'l0':
-            #     if len(x.data.shape) == 2 or len(x.data.shape) == 4:
-            #         state['s'].data = torch.where(torch.abs(x.data - grad / sigma) >= np.sqrt(2 * lmbda / sigma),
-            #                                       -grad / sigma, -x.data)
 
 
         # f(x+s), h(x+s)
