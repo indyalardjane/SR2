@@ -9,7 +9,6 @@ from torchvision import datasets, transforms
 from torch.autograd import Variable
 from sr2_optim import *
 from autoaugment import *
-# from resnet_noshortcut import *
 from resnet import *
 import torchvision.models as models
 from pyhessian import hessian
