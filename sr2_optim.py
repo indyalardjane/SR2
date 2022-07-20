@@ -152,10 +152,8 @@ class SR2optim(Optimizer):
 
 
 class SR2optiml1(SR2optim):
-    def __init__(self, params, nu1=1e-4, nu2=0.9, g1=1.5, g2=1.25, g3=0.5, lmbda=0.001, sigma=0.75,
-                 weight_decay=0.2):
-        super().__init__(params, nu1=nu1, nu2=nu2, g1=g1, g2=g2, g3=g3, lmbda=lmbda, sigma=sigma,
-                         weight_decay=weight_decay)
+    def __init__(self,  *args, **kwargs):
+        super().__init__( *args, **kwargs)
 
     def get_step(self, x, grad, sigma, lmbda):
         step = torch.max(x.data - grad / sigma - (lmbda / sigma), torch.zeros_like(x.data)) - \
@@ -164,10 +162,8 @@ class SR2optiml1(SR2optim):
 
 
 class SR2optiml0(SR2optim):
-    def __init__(self, params, nu1=1e-4, nu2=0.9, g1=1.5, g2=1.25, g3=0.5, lmbda=0.001, sigma=0.75,
-                 weight_decay=0.2):
-        super().__init__(params, nu1=nu1, nu2=nu2, g1=g1, g2=g2, g3=g3, lmbda=lmbda, sigma=sigma,
-                         weight_decay=weight_decay)
+    def __init__(self,  *args, **kwargs):
+        super().__init__( *args, **kwargs)
 
     def get_step(self, x, grad, sigma, lmbda):
         step = torch.where(torch.abs(x.data - grad / sigma) >= np.sqrt(2 * lmbda / sigma),
