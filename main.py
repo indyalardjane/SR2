@@ -9,6 +9,7 @@ from torchvision import datasets, transforms
 from torch.autograd import Variable
 from sr2_optim import *
 from autoaugment import *
+# from resnet_noshortcut import *
 from resnet import *
 import torchvision.models as models
 from pyhessian import hessian
@@ -61,16 +62,14 @@ def train(epoch):
                         laccum += l12.item()
                     elif args.reg == 'l23':
                         l23 = torch.sum((torch.abs(m.weight) + 1e-6).pow(2 / 3))
-                        laccum += l23.item()            
+                        laccum += l23.item()      
             return loss_f, laccum
 
-        loss, reg, norm_s, xi, sigma, rho, criteria, stop = optimizer.step(closure=closure)
+        loss, reg, norm_s, sigma, rho, stop = optimizer.step(closure=closure)
 
         if stop:
             print(' >> Stopping criteria activated')
 
-        stp_c = np.sqrt(sigma) * norm_s
-        stop_criterion.append(stp_c)
 
         l1loss.append(reg)
         current_obj = loss.item() + reg
@@ -80,10 +79,10 @@ def train(epoch):
             print(
                 'Train Epoch: {} [{}/{} ({:.0f}%)]\t f: {:e}\t h: {:e}\t '
                 'f+h: {:e}\t ||s||: {:e}'
-                '\t sigma: {:e} \t rho:  {:e}, \t Assp {:e}'.format(
+                '\t sigma: {:e} \t rho:  {:e} '.format(
                     epoch + 1, batch_id * len(inputs), len(train_data.dataset),
                     100. * batch_id / len(train_data), loss.item(), reg, current_obj, norm_s, sigma,
-                    rho, criteria))
+                    rho))
 
         if stop:
             print(' >> Stopping criteria activated')
@@ -115,15 +114,15 @@ def test():
 
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
-parser.add_argument('--reg', default='l1', help='which optimizer to use')
-parser.add_argument('--lam', type=float, default=0.001, help="reg. param")
+parser.add_argument('--reg', default='l23', help='which optimizer to use')
+parser.add_argument('--lam', type=float, default=0.01, help="reg. param")
 parser.add_argument('--max_epochs', type=int, default=300, help="maximum epochs")
 parser.add_argument('--eta1', type=float, default=0.00075, help="eta 1 in SR2")
 parser.add_argument('--eta2', type=float, default=0.999, help="eta 2 in SR2")
 parser.add_argument('--g1', type=float, default=5.57, help="gamma 1 in SR2")
-parser.add_argument('--g2', type=float, default=2.95, help="gamma 2 in SR2")
+# parser.add_argument('--g2', type=float, default=2.95, help="gamma 2 in SR2")
 parser.add_argument('--g3', type=float, default=0.79, help="gamma 3 in SR2")
-parser.add_argument('--wd', type=float, default=0.02, help="weight decay")
+parser.add_argument('--wd', type=float, default=0.0, help="weight decay")
 parser.add_argument('--seed', type=int, default=1, help="random seed")
 
 args = parser.parse_args()
@@ -141,9 +140,7 @@ transform_train = transforms.Compose(
         transforms.Resize((32, 32)),
         transforms.RandomCrop(32, padding=4),  # fill parameter needs torchvision installed from source
         transforms.RandomHorizontalFlip(),
-        # CIFAR10Policy(),
         transforms.ToTensor(),
-        # Cutout(n_holes=1, length=16),  # (https://github.com/uoguelph-mlrg/Cutout/blob/master/util/cutout.py)
         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
 
 transform_test = transforms.Compose([
@@ -160,17 +157,16 @@ test_loader = torch.utils.data.DataLoader(datasets.CIFAR10(root='dataset', train
 
 print('==> Building model..')
 # model = models.densenet121()
-# model.fc = nn.Linear(1024, 10)      # for CIFAR10
-
 model = ResNet34()
-
 # model = models.densenet201()
-# model.fc = nn.Linear(1024, 100)   # for CIFAR100
 
 model.to(device)
 
 print('==> Computing sigma_0..')
 sigma = get_sigma0(model)
+
+# model.fc = nn.Linear(1024, 10)
+# model.fc = nn.Linear(1024, 100)
 
 # Initialize the optimizer with the given parameters optimizer
 if args.reg == 'l1':
@@ -178,27 +174,27 @@ if args.reg == 'l1':
                            lmbda=args.lam, sigma=sigma, weight_decay=args.wd)
 elif args.reg == 'l0':
     optimizer = SR2optiml0(model.parameters(), nu1=args.eta1, nu2=args.eta2, g1=args.g1, g2=args.g2, g3=args.g3,
-                           lmbda=args.lam, sigma=sigma, weight_decay=args.wd)   
+                           lmbda=args.lam, sigma=sigma, weight_decay=args.wd)
 elif args.reg == 'l12':
-    optimizer = SR2optiml12(model.parameters(), nu1=args.eta1, nu2=args.eta2, g1=args.g1, g2=args.g2, g3=args.g3,
+    optimizer = SR2optiml12(model.parameters(), nu1=args.eta1, nu2=args.eta2, g1=args.g1, g3=args.g3,
                            lmbda=args.lam, sigma=sigma, weight_decay=args.wd)
 elif args.reg == 'l23':
-    optimizer = SR2optiml23(model.parameters(), nu1=args.eta1, nu2=args.eta2, g1=args.g1, g2=args.g2, g3=args.g3,
+    optimizer = SR2optiml23(model.parameters(), nu1=args.eta1, nu2=args.eta2, g1=args.g1, g3=args.g3,
                            lmbda=args.lam, sigma=sigma, weight_decay=args.wd)
 else:
     print('>> Regularization term not supported')
 
 test_accs = []
 training_losses = []
-l_loss = []
-run_id = 'sr2_r34'
+l1_loss = []
+run_id = 'sr2_r34_l23_test'
 
 # training
 for epoch in range(args.max_epochs):
     # train network
     loss, reg, stop = train(epoch)
     training_losses.append(loss)
-    l_loss.append(reg)
+    l1_loss.append(reg)
 
     # test network
     acc_test = test()
@@ -209,8 +205,8 @@ for epoch in range(args.max_epochs):
 
 print('Successful steps: ', optimizer.successful_steps)
 print('Failed steps: ', optimizer.failed_steps)
-
 torch.save(model.state_dict(), "data/weight_final_" + run_id)
 np.save("data/loss_" + run_id, training_losses)
-np.save("data/L__" + run_id, l_loss)
+np.save("data/L1___" + run_id, l1_loss)
 np.save("data/acc_" + run_id, test_accs)
+
