@@ -11,27 +11,21 @@ class SR2optim(Optimizer):
             parameter groups
     """
 
-    def __init__(self, params, nu1=1e-4, nu2=0.9, g1=1.5, g2=1.25, g3=0.5, lmbda=0.001, sigma=0.75,
-                 weight_decay=0.2):
-        if not 0.0 <= nu1 < 1:
-            raise ValueError("Invalid nu1 parameter: {}".format(nu1))
-        if not 0.0 <= nu2 < 1.0:
-            raise ValueError("Invalid nu1 parameter: {}".format(nu2))
-        if not nu1 <= nu2:
-            raise ValueError("nu1 should be lower than nu2")
+    def __init__(self, params, nu1=1e-4, nu2=0.9, g1=1.5, g3=0.5, lmbda=0.001, sigma=0.75, weight_decay=0.2):
+        
+        if not 0.0 <= nu1 <= nu2 < 1.0:
+            raise ValueError("Invalid parameter: 0 <= {} <= {} < 1".format(nu1, nu2))
         if not g1 > 1.0:
             raise ValueError("Invalid g1 parameter: {}".format(g1))
-        if not g2 <= g1:
-            raise ValueError("Invalid g2 value: {}".format(g2))
         if not 0 < g3 <= 1:
             raise ValueError("Invalid g3 value: {}".format(g3))
 
         self.successful_steps = 0
         self.failed_steps = 0
         self.stop_counter = 0
-        defaults = dict(nu1=nu1, nu2=nu2, g1=g1, g2=g2, g3=g3, lmbda=lmbda, sigma=sigma,
-                        weight_decay=weight_decay)
+        defaults = dict(nu1=nu1, nu2=nu2, g1=g1, g3=g3, lmbda=lmbda, sigma=sigma, weight_decay=weight_decay)
         super(SR2optim, self).__init__(params, defaults)
+
 
     def __setstate__(self, state):
         super(SR2optim, self).__setstate__(state)
@@ -49,8 +43,10 @@ class SR2optim(Optimizer):
             i += 1
 
     def get_step(self, x, grad, sigma, lmbda):
-        step = torch.zeros_like(x.data)
-        return step
+        raise NotImplementedError
+
+    def update_weights(self, x, step, grad, sigma):
+        raise NotImplementedError
 
     def step(self, closure=None):
         """Performs a single optimization step.
@@ -73,7 +69,7 @@ class SR2optim(Optimizer):
         f_x = loss.item()
         h_x *= lmbda
         current_obj = f_x + h_x
-        l1 = h_x
+        l = h_x
 
         # saving the parameters in case the step is rejected
         current_params = self._copy_params()
@@ -88,7 +84,7 @@ class SR2optim(Optimizer):
                 continue
 
             # Perform weight-decay
-            x.data.mul_(1 - 0.001 * group['weight_decay'])
+            # x.data.mul_(1 - 0.001 * group['weight_decay'])
 
             grad = x.grad.data
 
@@ -103,39 +99,36 @@ class SR2optim(Optimizer):
             # phi(x+s) ~= f(x) + grad^T * s
             flat_g = grad.view(-1)
             flat_s = state['s'].view(-1)
-            gts += torch.dot(flat_g, flat_s).item()
-            phi_x += torch.dot(flat_g, flat_s).item()
+            gt_s = torch.dot(flat_g, flat_s).item()
+            gts += gt_s
+            phi_x += gt_s
 
             # Update the weights
-            x.data = x.data.add_(state['s'].data)
+            self.update_weights(x, state['s'], grad, sigma)
 
 
         # f(x+s), h(x+s)
         fxs, hxs = closure()
         hxs *= lmbda
 
-        # Compute model
-        m_s = phi_x + hxs + 0.5 * sigma * norm_s ** 2
-        xi = current_obj - m_s
-
         # Rho
         rho = current_obj - (fxs.item() + hxs)
-        try:
-            rho /= current_obj - (phi_x + hxs)
-            self.stop_counter = 0
-        except ZeroDivisionError:
+        delta_model= current_obj - (phi_x + hxs)
+        
+        if delta_model == 0:
             rho = 0
             self.stop_counter += 1
+        else:
+            rho /= delta_model
+            self.stop_counter = 0
 
         if self.stop_counter > 30:
             stop = True
 
-        criteria = (torch.abs(f_x - fxs - gts) / norm_s ** 2).item()
-
         # Updates
         if rho >= self.param_groups[0]['nu1']:
             loss = fxs
-            l1 = hxs
+            l = hxs
             loss.backward()
             self.successful_steps += 1
         else:
@@ -148,7 +141,7 @@ class SR2optim(Optimizer):
         if rho >= self.param_groups[0]['nu2']:
             group['sigma'] *= group['g3']
 
-        return loss, l1, norm_s, xi, group['sigma'], rho, criteria, stop
+        return loss, l, norm_s, group['sigma'], rho, stop
 
 
 class SR2optiml1(SR2optim):
@@ -160,12 +153,54 @@ class SR2optiml1(SR2optim):
                torch.max(-x.data + grad / sigma - (lmbda / sigma), torch.zeros_like(x.data)) - x.data
         return step
 
+    def update_weights(self, x, step, grad, sigma):
+        if len(x.data.shape) != 1:
+            x.data = x.data.add_(step.data)
+        else:
+            x.data.add_(- grad / sigma)
+        return x
+
 
 class SR2optiml0(SR2optim):
     def __init__(self,  *args, **kwargs):
         super().__init__( *args, **kwargs)
+    
+    def get_step(self, x, grad, sigma, lmbda):
+        g_over_sigma = grad / sigma
+        step = torch.where(torch.abs(x.data - g_over_sigma) >= np.sqrt(2 * lmbda / sigma),
+                           -g_over_sigma, -x.data)
+        return step
+
+    def update_weights(self, x, step, grad, sigma):
+        g_over_sigma = grad / sigma
+        if len(x.data.shape) == 2 or len(x.data.shape) == 4:
+            x.data = x.data.add_(step.data)
+        else:
+            x.data.add_(- g_over_sigma)
+        return x
+    
+
+class SR2optiml23(SR2optim):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
     def get_step(self, x, grad, sigma, lmbda):
-        step = torch.where(torch.abs(x.data - grad / sigma) >= np.sqrt(2 * lmbda / sigma),
-                           -grad / sigma, -x.data)
+        g_over_sigma = grad / sigma
+        X = x.data - g_over_sigma
+        L = 2 * lmbda/sigma
+        phi = torch.arccosh(27/16 * (X**2) * (L**(-3/2)))
+        A = 2/np.sqrt(3) * L**(1/4) * (torch.cosh(phi/3)) ** (1/2)
+        cond = 2/3 * (3 * L**3)**(1/4)
+        s = ((A + ((2 * torch.abs(X))/A - A ** 2) ** (1/2)) / 2) ** 3
+
+        step = torch.where(X > cond, s - x.data,
+                           torch.where(X <  -cond, -s - x.data, -x.data))
         return step
+
+    def update_weights(self, x, step, grad, sigma):
+        if len(x.data.shape) == 2 or len(x.data.shape) == 4:
+            x.data = x.data.add_(step.data)
+        else:
+            x.data.add_(- grad / sigma)
+        return x
+
