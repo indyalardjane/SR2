@@ -154,16 +154,17 @@ test_loader = torch.utils.data.DataLoader(datasets.CIFAR10(root='dataset', train
 
 print('==> Building model..')
 model = models.densenet121()
+model.fc = nn.Linear(1024, 10)      # for CIFAR10
+
 # model = ResNet34()
+
 # model = models.densenet201()
+# model.fc = nn.Linear(1024, 100)   # for CIFAR100
 
 model.to(device)
 
 print('==> Computing sigma_0..')
 sigma = get_sigma0(model)
-
-model.fc = nn.Linear(1024, 10)
-# model.fc = nn.Linear(1024, 100)
 
 # Initialize the optimizer with the given parameters optimizer
 if args.reg == 'l1':
