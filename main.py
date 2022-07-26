@@ -153,10 +153,10 @@ test_loader = torch.utils.data.DataLoader(datasets.CIFAR10(root='dataset', train
                                           batch_size=100, num_workers=4, shuffle=False)
 
 print('==> Building model..')
-model = models.densenet121()
-model.fc = nn.Linear(1024, 10)      # for CIFAR10
+# model = models.densenet121()
+# model.fc = nn.Linear(1024, 10)      # for CIFAR10
 
-# model = ResNet34()
+model = ResNet34()
 
 # model = models.densenet201()
 # model.fc = nn.Linear(1024, 100)   # for CIFAR100
@@ -172,6 +172,12 @@ if args.reg == 'l1':
                            lmbda=args.lam, sigma=sigma, weight_decay=args.wd)
 elif args.reg == 'l0':
     optimizer = SR2optiml0(model.parameters(), nu1=args.eta1, nu2=args.eta2, g1=args.g1, g2=args.g2, g3=args.g3,
+                           lmbda=args.lam, sigma=sigma, weight_decay=args.wd)   
+elif args.reg == 'l12':
+    optimizer = SR2optiml12(model.parameters(), nu1=args.eta1, nu2=args.eta2, g1=args.g1, g2=args.g2, g3=args.g3,
+                           lmbda=args.lam, sigma=sigma, weight_decay=args.wd)
+elif args.reg == 'l23':
+    optimizer = SR2optiml23(model.parameters(), nu1=args.eta1, nu2=args.eta2, g1=args.g1, g2=args.g2, g3=args.g3,
                            lmbda=args.lam, sigma=sigma, weight_decay=args.wd)
 else:
     print('>> Regularization term not supported')
@@ -179,7 +185,7 @@ else:
 test_accs = []
 training_losses = []
 l_loss = []
-run_id = 'sr2_d121'
+run_id = 'sr2_r34'
 
 # training
 for epoch in range(args.max_epochs):
