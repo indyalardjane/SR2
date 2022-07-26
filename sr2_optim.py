@@ -99,14 +99,13 @@ class SR2optim(Optimizer):
             # phi(x+s) ~= f(x) + grad^T * s
             flat_g = grad.view(-1)
             flat_s = state['s'].view(-1)
-            gt_s = torch.dot(flat_g, flat_s).item()
-            gts += gt_s
-            phi_x += gt_s
+            gts += torch.dot(flat_g, flat_s).item()
 
             # Update the weights
             self.update_weights(x, state['s'], grad, sigma)
 
 
+        phi_x += gts
         # f(x+s), h(x+s)
         fxs, hxs = closure()
         hxs *= lmbda
