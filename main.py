@@ -56,6 +56,12 @@ def train(epoch):
                     elif args.reg == 'l0':
                         l0 = torch.count_nonzero(m.weight)
                         laccum += l0.item()
+                    elif args.reg == 'l12':
+                        l12 = torch.sum((torch.abs(m.weight) + 1e-6).sqrt())
+                        laccum += l12.item()
+                    elif args.reg == 'l23':
+                        l23 = torch.sum((torch.abs(m.weight) + 1e-6).pow(2 / 3))
+                        laccum += l23.item()            
             return loss_f, laccum
 
         loss, reg, norm_s, xi, sigma, rho, criteria, stop = optimizer.step(closure=closure)
