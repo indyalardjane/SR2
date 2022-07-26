@@ -178,7 +178,7 @@ else:
 
 test_accs = []
 training_losses = []
-l1_loss = []
+l_loss = []
 run_id = 'sr2_d121'
 
 # training
@@ -186,7 +186,7 @@ for epoch in range(args.max_epochs):
     # train network
     loss, reg, stop = train(epoch)
     training_losses.append(loss)
-    l1_loss.append(reg)
+    l_loss.append(reg)
 
     # test network
     acc_test = test()
@@ -197,7 +197,8 @@ for epoch in range(args.max_epochs):
 
 print('Successful steps: ', optimizer.successful_steps)
 print('Failed steps: ', optimizer.failed_steps)
+
 torch.save(model.state_dict(), "data/weight_final_" + run_id)
 np.save("data/loss_" + run_id, training_losses)
-np.save("data/L1___" + run_id, l1_loss)
+np.save("data/L__" + run_id, l_loss)
 np.save("data/acc_" + run_id, test_accs)
