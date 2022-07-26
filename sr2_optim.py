@@ -13,16 +13,10 @@ class SR2optim(Optimizer):
 
     def __init__(self, params, nu1=1e-4, nu2=0.9, g1=1.5, g2=1.25, g3=0.5, lmbda=0.001, sigma=0.75,
                  weight_decay=0.2):
-        if not 0.0 <= nu1 < 1:
-            raise ValueError("Invalid nu1 parameter: {}".format(nu1))
-        if not 0.0 <= nu2 < 1.0:
-            raise ValueError("Invalid nu1 parameter: {}".format(nu2))
-        if not nu1 <= nu2:
-            raise ValueError("nu1 should be lower than nu2")
+        if not 0.0 <= nu1 <= nu2 < 1:
+            raise ValueError("Invalid parameter: 0 <= {} <= {} < 1".format(nu1, nu2))
         if not g1 > 1.0:
             raise ValueError("Invalid g1 parameter: {}".format(g1))
-        if not g2 <= g1:
-            raise ValueError("Invalid g2 value: {}".format(g2))
         if not 0 < g3 <= 1:
             raise ValueError("Invalid g3 value: {}".format(g3))
 
@@ -120,11 +114,6 @@ class SR2optim(Optimizer):
         hxs *= lmbda
 
         rho = current_obj - (fxs.item() + hxs)
-        # if rho < 0:
-        #     print('Numerator is negatif', rho)
-        #    print('Current objectif', current_obj)
-        #    print('Objective at x+s', fxs.item() + hxs)
-
         delta_model= current_obj - (phi_x + hxs)
 
 
@@ -134,10 +123,6 @@ class SR2optim(Optimizer):
         else:
             rho /= delta_model
             self.stop_counter = 0
-
-        # if rho < 0:
-        #     print('Rho is negative', rho)
-        #     print('Delta model', delta_model)
 
 
         if self.stop_counter > 30:
@@ -160,44 +145,6 @@ class SR2optim(Optimizer):
             group['sigma'] *= group['g3']
 
         return loss, l, norm_s, group['sigma'], rho, stop
-
-
-class SR2optiml1(SR2optim):
-    def __init__(self, params, nu1=1e-4, nu2=0.9, g1=1.5, g2=1.25, g3=0.5, lmbda=0.001, sigma=0.75,
-                 weight_decay=0.2):
-        super().__init__(params, nu1=nu1, nu2=nu2, g1=g1, g2=g2, g3=g3, lmbda=lmbda, sigma=sigma,
-                         weight_decay=weight_decay)
-
-    def get_step(self, x, grad, sigma, lmbda):
-        step = torch.max(x.data - grad / sigma - (lmbda / sigma), torch.zeros_like(x.data)) - \
-               torch.max(-x.data + grad / sigma - (lmbda / sigma), torch.zeros_like(x.data)) - x.data
-        return step
-
-    def update_weights(self, x, step, grad, sigma):
-        if len(x.data.shape) != 1:
-            x.data = x.data.add_(step.data)
-        else:
-            x.data.add_(- grad / sigma)
-        return x
-
-
-class SR2optiml0(SR2optim):
-    def __init__(self, params, nu1=1e-4, nu2=0.9, g1=1.5, g2=1.25, g3=0.5, lmbda=0.001, sigma=0.75,
-                 weight_decay=0.2):
-        super().__init__(params, nu1=nu1, nu2=nu2, g1=g1, g2=g2, g3=g3, lmbda=lmbda, sigma=sigma,
-                         weight_decay=weight_decay)
-
-    def get_step(self, x, grad, sigma, lmbda):
-        step = torch.where(torch.abs(x.data - grad / sigma) >= np.sqrt(2 * lmbda / sigma),
-                           -grad / sigma, -x.data)
-        return step
-
-    def update_weights(self, x, step, grad, sigma):
-        if len(x.data.shape) == 2 or len(x.data.shape) == 4:
-            x.data = x.data.add_(step.data)
-        else:
-            x.data.add_(- grad / sigma)
-        return x
 
 
 class SR2optiml23(SR2optim):
