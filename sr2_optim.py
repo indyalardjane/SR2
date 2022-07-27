@@ -2,6 +2,7 @@ import torch
 from torch.optim.optimizer import Optimizer, required
 from copy import deepcopy
 import numpy as np
+import logging
 
 
 class SR2optim(Optimizer):
@@ -23,6 +24,7 @@ class SR2optim(Optimizer):
         self.successful_steps = 0
         self.failed_steps = 0
         self.stop_counter = 0
+        logging.basicConfig(level=logging.DEBUG)
         defaults = dict(nu1=nu1, nu2=nu2, g1=g1, g2=g2, g3=g3, lmbda=lmbda, sigma=sigma, weight_decay=weight_decay)
         super(SR2optim, self).__init__(params, defaults)
 
@@ -123,7 +125,12 @@ class SR2optim(Optimizer):
         else:
             rho /= delta_model
             self.stop_counter = 0
-
+            
+        if delta_model  < 0:
+            logging.warning('rho denominator is negatig: ', delta_model)
+            logging.debug('current_objectif = ', current_obj)
+            logging.debug('phi = ', phi_x)
+            logging.debug('h(x+s) = ', hxs)
 
         if self.stop_counter > 30:
             stop = True
@@ -136,13 +143,17 @@ class SR2optim(Optimizer):
             self.successful_steps += 1
         else:
             # Reject the step
+            logging.debug('step rejected')
             self._load_params(current_params)
             group['sigma'] *= group['g1']
             self.failed_steps += 1
-            print('> Failed step')
+            logging.debug('>> sigma = ')
+            logging.debug(group['sigma'])
 
         if rho >= self.param_groups[0]['nu2']:
             group['sigma'] *= group['g3']
+            logging.debug('>> sigma = ')
+            logging.debug(group['sigma'])
 
         return loss, l, norm_s, group['sigma'], rho, stop
 
@@ -152,21 +163,52 @@ class SR2optiml23(SR2optim):
         super().__init__(*args, **kwargs)
 
     def get_step(self, x, grad, sigma, lmbda):
-        X = x.data - grad / sigma
-        L = 2* lmbda/sigma
-        phi = torch.arccosh(27/16 * (X**2) * (L**(-3/2)))
-        A = 2/np.sqrt(3) * L**(1/4) * (torch.cosh(phi/3))**(1/2)
-        cond = 2/3 * (3 * L**3)**(1/4)
-        s = ((A + ((2 * torch.abs(X))/A - A**2)**(1/2)) / 2)**3
+        # X = x.data - grad / sigma
+        #L = 2* lmbda/sigma
+        #phi = torch.arccosh(27/16 * (X**2) * (L**(-3/2)))
+        #A = 2/np.sqrt(3) * L**(1/4) * (torch.cosh(phi/3))**(1/2)
+        #cond = 2/3 * (3 * L**3)**(1/4)
+        #s = ((A + ((2 * torch.abs(X))/A - A**2)**(1/2)) / 2)**3
 
-        step = torch.where(X > cond, s - x.data,
-                           torch.where(X <  -cond, -s - x.data, -x.data))
+        #step = torch.where(X > cond, s - x.data,
+        #                   torch.where(X <  -cond, -s - x.data, -x.data))
+
+        eff_lam = 2 * lmbda / sigma
+        threshold = (2/3) * (3 * eff_lam ** 3) ** (1/4)
+
+        X = x.data - grad / sigma
+
+        mask = X.abs() > threshold
+        mask = mask.float()
+        logging.debug('> Mask ')
+        logging.debug(mask)
+
+        zero_mask = X.abs() <= threshold
+        zero_mask = zero_mask.float() * 100
+        logging.debug('> zero mask')
+        logging.debug(zero_mask)
+
+        X.mul_(mask)
+        angle = torch.arccosh((27/16) * (X ** 2 + zero_mask) * (eff_lam ** (-1.5)))
+        logging.debug('> angle before mask')
+        logging.debug(angle)
+        angle = angle * mask
+        logging.debug('> angle after mask')
+        logging.debug(angle)
+
+        absA = (2/np.sqrt(3)) * (eff_lam ** (1/4)) * (torch.cosh(angle/3) ** (1/2))
+        value = ((absA + torch.sqrt(2 * (X.abs() + zero_mask) / absA - absA ** 2)) / 2) ** 3
+
+        step = X.sign() * value * mask - x.data
+
         return step
 
     def update_weights(self, x, step, grad, sigma):
-        if len(x.data.shape) == 2 or len(x.data.shape) == 4:
-            x.data = x.data.add_(step.data)
-        else:
-            x.data.add_(- grad / sigma)
+        # if len(x.data.shape) == 2 or len(x.data.shape) == 4:
+        x.data = x.data.add_(step.data)
+        # else:
+        #     logging.debug('layer of shape != 2, 4')
+        #     logging.debug(x.data.shape)
+        #    x.data.add_(- grad / sigma)
         return x
 
