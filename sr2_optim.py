@@ -192,8 +192,8 @@ class SR2optiml23(SR2optim):
 
         X.mul_(mask)
         angle = torch.arccosh((27/16) * (X ** 2 + zero_mask) * (eff_lam ** (-1.5)))
-        logging.debug('> angle before mask')
-        logging.debug(angle)
+        # logging.debug('> angle before mask')
+        # logging.debug(angle)
         angle = angle * mask
         # logging.debug('> angle after mask')
         # logging.debug(angle)
