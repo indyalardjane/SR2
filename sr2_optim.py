@@ -152,11 +152,11 @@ class SR2optim(Optimizer):
                 self._load_params(current_params)
                 group['sigma'] *= group['g1']
                 self.failed_steps += 1
-                logging.debug('>> sigma = {}: '.format(group['sigma']))
+                logging.debug('>> sigma = {} '.format(group['sigma']))
 
             if rho >= self.param_groups[0]['nu2']:
                 group['sigma'] *= group['g3']
-                logging.debug('>> sigma = {}: '.format(group['sigma']))
+                logging.debug('>> sigma = {} '.format(group['sigma']))
 
         return loss, l, norm_s, group['sigma'], rho, stop
 
