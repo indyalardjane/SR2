@@ -6,7 +6,7 @@ import logging
 
 
 class SR2optim(Optimizer):
-    """Implementation of Prox-GEN algorithm
+    """Implementation of SR2 algorithm
     Arguments:
         params (iterable): iterable of parameters to optimize or dicts defining
             parameter groups
@@ -141,14 +141,14 @@ class SR2optim(Optimizer):
         # Updates
         if do_updates:
             if rho >= self.param_groups[0]['nu1']:
-                logging.info('step accepted')
+                logging.debug('step accepted')
                 loss = fxs
                 l = hxs
                 loss.backward()
                 self.successful_steps += 1
             else:
                 # Reject the step
-                logging.info('step rejected')
+                logging.debug('step rejected')
                 self._load_params(current_params)
                 group['sigma'] *= group['g1']
                 self.failed_steps += 1
