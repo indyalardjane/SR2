@@ -141,6 +141,7 @@ class SR2optim(Optimizer):
         # Updates
         if do_updates:
             if rho >= self.param_groups[0]['nu1']:
+                logging.info('step accepted')
                 loss = fxs
                 l = hxs
                 loss.backward()
