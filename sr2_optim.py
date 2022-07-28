@@ -24,6 +24,7 @@ class SR2optim(Optimizer):
         self.successful_steps = 0
         self.failed_steps = 0
         self.stop_counter = 0
+        
         logging.basicConfig(level=logging.DEBUG)
         defaults = dict(nu1=nu1, nu2=nu2, g1=g1, g2=g2, g3=g3, lmbda=lmbda, sigma=sigma, weight_decay=weight_decay)
         super(SR2optim, self).__init__(params, defaults)
@@ -81,6 +82,7 @@ class SR2optim(Optimizer):
         phi_x = f_x
         gts = 0
         stop = False
+        do_updates = True
 
         for x in group['params']:
             if x.grad is None:
@@ -115,45 +117,45 @@ class SR2optim(Optimizer):
         fxs, hxs = closure()
         hxs *= lmbda
 
-        rho = current_obj - (fxs.item() + hxs)
         delta_model= current_obj - (phi_x + hxs)
+        
+        if delta_model  < -1e-4:
+            logging.error('denominator is negatif {}: '.format(delta_model))
+            logging.debug('current_objectif = {}: '.format(current_obj))
+            logging.debug('phi = {}: '.format(phi_x))
+            logging.debug('h(x+s) = {}: '.format(hxs))
+            break
 
-
-        if delta_model == 0:
+        elif -1e-4 <= delta_model <= 0:
             rho = 0
             self.stop_counter += 1
+            logging.info('denominator of rho is slightly negatif  {}:'.format(delta_model))
+            do_updates = False
         else:
-            rho /= delta_model
+            rho = (current_obj - fxs - hxs) / delta_model
             self.stop_counter = 0
             
-        if delta_model  < 0:
-            logging.warning('rho denominator is negatig: ', delta_model)
-            logging.debug('current_objectif = ', current_obj)
-            logging.debug('phi = ', phi_x)
-            logging.debug('h(x+s) = ', hxs)
-
         if self.stop_counter > 30:
             stop = True
 
         # Updates
-        if rho >= self.param_groups[0]['nu1']:
-            loss = fxs
-            l = hxs
-            loss.backward()
-            self.successful_steps += 1
-        else:
-            # Reject the step
-            logging.debug('step rejected')
-            self._load_params(current_params)
-            group['sigma'] *= group['g1']
-            self.failed_steps += 1
-            logging.debug('>> sigma = ')
-            logging.debug(group['sigma'])
+        if do_updates:
+            if rho >= self.param_groups[0]['nu1']:
+                loss = fxs
+                l = hxs
+                loss.backward()
+                self.successful_steps += 1
+            else:
+                # Reject the step
+                logging.info('step rejected')
+                self._load_params(current_params)
+                group['sigma'] *= group['g1']
+                self.failed_steps += 1
+                logging.debug('>> sigma = {}: '.format(group['sigma']))
 
-        if rho >= self.param_groups[0]['nu2']:
-            group['sigma'] *= group['g3']
-            logging.debug('>> sigma = ')
-            logging.debug(group['sigma'])
+            if rho >= self.param_groups[0]['nu2']:
+                group['sigma'] *= group['g3']
+                logging.debug('>> sigma = {}: '.format(group['sigma']))
 
         return loss, l, norm_s, group['sigma'], rho, stop
 
@@ -180,21 +182,21 @@ class SR2optiml23(SR2optim):
 
         mask = X.abs() > threshold
         mask = mask.float()
-        logging.debug('> Mask ')
-        logging.debug(mask)
+        # logging.debug('> Mask ')
+        # logging.debug(mask)
 
         zero_mask = X.abs() <= threshold
         zero_mask = zero_mask.float() * 100
-        logging.debug('> zero mask')
-        logging.debug(zero_mask)
+        # logging.debug('> zero mask')
+        # logging.debug(zero_mask)
 
         X.mul_(mask)
         angle = torch.arccosh((27/16) * (X ** 2 + zero_mask) * (eff_lam ** (-1.5)))
         logging.debug('> angle before mask')
         logging.debug(angle)
         angle = angle * mask
-        logging.debug('> angle after mask')
-        logging.debug(angle)
+        # logging.debug('> angle after mask')
+        # logging.debug(angle)
 
         absA = (2/np.sqrt(3)) * (eff_lam ** (1/4)) * (torch.cosh(angle/3) ** (1/2))
         value = ((absA + torch.sqrt(2 * (X.abs() + zero_mask) / absA - absA ** 2)) / 2) ** 3
