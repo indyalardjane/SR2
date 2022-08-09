@@ -124,7 +124,7 @@ class SR2optim(Optimizer):
             logging.debug('current_objectif = {}: '.format(current_obj))
             logging.debug('phi = {}: '.format(phi_x))
             logging.debug('h(x+s) = {}: '.format(hxs))
-            break
+            sys.exit()
 
         elif -1e-4 <= delta_model <= 0:
             rho = 0
@@ -166,43 +166,43 @@ class SR2optiml23(SR2optim):
         super().__init__(*args, **kwargs)
 
     def get_step(self, x, grad, sigma, lmbda):
-        # X = x.data - grad / sigma
-        #L = 2* lmbda/sigma
-        #phi = torch.arccosh(27/16 * (X**2) * (L**(-3/2)))
-        #A = 2/np.sqrt(3) * L**(1/4) * (torch.cosh(phi/3))**(1/2)
-        #cond = 2/3 * (3 * L**3)**(1/4)
-        #s = ((A + ((2 * torch.abs(X))/A - A**2)**(1/2)) / 2)**3
-
-        #step = torch.where(X > cond, s - x.data,
-        #                   torch.where(X <  -cond, -s - x.data, -x.data))
-
-        eff_lam = 2 * lmbda / sigma
-        threshold = (2/3) * (3 * eff_lam ** 3) ** (1/4)
-
         X = x.data - grad / sigma
+        L = 2* lmbda/sigma
+        phi = torch.arccosh(27/16 * (X**2) * (L**(-3/2)))
+        A = 2/np.sqrt(3) * L**(1/4) * (torch.cosh(phi/3))**(1/2)
+        cond = 2/3 * (3 * L**3)**(1/4)
+        s = ((A + ((2 * torch.abs(X))/A - A**2)**(1/2)) / 2)**3
 
-        mask = X.abs() > threshold
-        mask = mask.float()
+        step = torch.where(X > cond, s - x.data,
+                          torch.where(X <  -cond, -s - x.data, -x.data))
+
+#         eff_lam = 2 * lmbda / sigma
+#         threshold = (2/3) * (3 * eff_lam ** 3) ** (1/4)
+
+#         X = x.data - grad / sigma
+
+#         mask = X.abs() > threshold
+#         mask = mask.float()
         # logging.debug('> Mask ')
         # logging.debug(mask)
 
-        zero_mask = X.abs() <= threshold
-        zero_mask = zero_mask.float() * 100
+#         zero_mask = X.abs() <= threshold
+#         zero_mask = zero_mask.float() * 100
         # logging.debug('> zero mask')
         # logging.debug(zero_mask)
 
-        X.mul_(mask)
-        angle = torch.arccosh((27/16) * (X ** 2 + zero_mask) * (eff_lam ** (-1.5)))
+#         X.mul_(mask)
+#         angle = torch.arccosh((27/16) * (X ** 2 + zero_mask) * (eff_lam ** (-1.5)))
         # logging.debug('> angle before mask')
         # logging.debug(angle)
-        angle = angle * mask
+        # angle = angle * mask
         # logging.debug('> angle after mask')
         # logging.debug(angle)
 
-        absA = (2/np.sqrt(3)) * (eff_lam ** (1/4)) * (torch.cosh(angle/3) ** (1/2))
-        value = ((absA + torch.sqrt(2 * (X.abs() + zero_mask) / absA - absA ** 2)) / 2) ** 3
+        # absA = (2/np.sqrt(3)) * (eff_lam ** (1/4)) * (torch.cosh(angle/3) ** (1/2))
+        # value = ((absA + torch.sqrt(2 * (X.abs() + zero_mask) / absA - absA ** 2)) / 2) ** 3
 
-        step = X.sign() * value * mask - x.data
+        # step = X.sign() * value * mask - x.data
 
         return step
 
